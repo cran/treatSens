@@ -1,0 +1,17 @@
+310d97f7dba85bca7dd0d472f45ec480 *DESCRIPTION
+6253f24196b7766db34f51df3a442131 *NAMESPACE
+0e98d32fe409a9d46147453fd7a837dc *R/X_partials.R
+2bb99e53028cc57ae49a647636027304 *R/calc_range.R
+9e2c7212d45a3ec534f2ec222a15baba *R/genU_contY.R
+d8c6b8215bb0040bbe5b8f1f686b579b *R/grid_range.R
+00879e4b610a2df3a035e47723915ef8 *R/housekeeping.R
+923e17f02c951f37af35149c12860d83 *R/object_def.R
+18790059d672c9c9caf460c8134918c0 *R/pweight.R
+615d19d8365ace4f186c3a0ef5ab4c22 *R/sensPlot.R
+ff0b4032530c81263bb9b1717230e370 *R/treatSens.R
+358a35315f15c43a38b57445de56e589 *R/warnings.R
+6b4089a9eba54156f1680429fd13c053 *inst/CITATION
+071234b50b152a22dee07e0dadc493e8 *man/sensPlot.Rd
+63b66e7a5b24b47e5d282bfe1a79031c *man/summary.Rd
+e6f08097cdcb885ec72a7c20282eb21d *man/treatSens-package.Rd
+76a396b70c645b27cb633ef55b4b5564 *man/treatSens.Rd

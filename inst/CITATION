@@ -1,0 +1,33 @@
+authors <- c("Nicole Bohme Carnegie", "Masataka Harada", "Jennifer Hill")
+
+csatitle <- "treatSens: A Package to Assess Sensitivity of Causal Analyses to Unmeasured Confounding"
+csadesc <- packageDescription("treatSens")
+csaversion <- csadesc$Version
+csadate <- csadesc$Date
+s <- regexpr("20[0-9][0-9]", csadate)
+csayear <- ifelse (s==-1, "2003", substr(csadate, s, s+3))
+      
+
+citHeader(
+  "To cite the package 'treatSens', please use the citation below.\n\n",
+   'For BibTeX format, use toBibtex(citation("treatSens")).',
+   sep="")
+   
+citEntry(entry="Manual",
+         author = authors,
+         title = csatitle,
+         year         = csayear,
+         note         = paste("Version ", csaversion,
+                        sep=""),
+         address      = "New York, NY",
+         url          = "http://CRAN.R-project.org/package=treatSens",
+         textVersion = paste(paste(authors, collapse=", "), " (", csayear,
+               "), ", csatitle, ". Version ", csaversion,
+               sep="")
+         )
+
+         
+citFooter("We have invested a lot of time and effort in creating the",
+          "'treatSens' package for use by other researchers.",
+          "Please cite it in all papers where it is used.")
+          
