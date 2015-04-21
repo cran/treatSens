@@ -1,3 +1,6 @@
+#####################
+#warnings for GLM SA
+#####################
 warnings <- function(formula,     #formula: assume treatment is 1st term on rhs
                      resp.family,  #family for GLM of model for response
                      trt.family,  #family for GLM of model for treatment
@@ -178,3 +181,5 @@ warnings <- function(formula,     #formula: assume treatment is 1st term on rhs
               zetaz.range=zetaz.range,
               data=postdata))
 }            
+
+

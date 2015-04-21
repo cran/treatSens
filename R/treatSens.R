@@ -20,7 +20,6 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
                      core = NULL, 		#number of CPU cores used (Max=8). Compatibility with Mac is unknown.
                      spy.range = NULL,  	#custom range for sensitivity parameter on Y, e.g.(0,10), zero.loc will be overridden.
                      spz.range = NULL,  	#custom range for sensitivity parameter on Z, e.g.(-2,2), zero.loc will be overridden.
-                     jitter = FALSE,    	#add jitter to grids near the axis.
                      trim.wt = 10     	#the maximum size of weight is set at "trim.wt"% of the inferential group. type NULL to turn off.
 ){
   #this code let R issue warnings as they occur.
@@ -183,6 +182,7 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
     Xpartials <- X.partials(Y, Z, X, resp.family, trt.family)
   }else{
     v_Y <- var(Y.res)*(n.obs-1)/(n.obs-2)
+    Xcoef <- NULL
     Xpartials <- NULL
   }
 
@@ -198,14 +198,13 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
     Xcoef.flg =  as.vector(ifelse(Xcoef[,2]>=0,1,-1))
     X.positive = t(t(X)*Xcoef.flg)
     null.resp.plot <- glm(Y~Z+X.positive, family=resp.family, weights=weights)
-    null.trt.plot <- glm(Z~X.positive, family=trt.family)
-    Xcoef.plot = cbind(null.trt.plot$coef[-1], null.resp.plot$coef[-c(1,2)])
+    Xcoef.plot = cbind(null.trt$coef[-1], null.resp.plot$coef[-c(1,2)])
   }
   if(!is.null(X) & sensParam == "cor") {
     #Transform X with neg. reln to Y to limit plot to 1 & 2 quadrants.
     Xcoef.flg =  as.vector(ifelse(Xpartials[,2]>=0,1,-1))
     X.positive = t(t(X)*Xcoef.flg)
-    Xcoef.plot <- X.partials(Y, Z, X.positive, resp.family, trt.family)
+    Xcoef.plot <- cbind(X.partials[,1], X.partials(Y, Z, X.positive, resp.family, trt.family)[,2])
     Xcoef <- Xpartials
   }
   
@@ -214,10 +213,11 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
                      standardize=standardize, weights=weights, iter.j=iter.j, 
                      offset = offset, p = NULL)
   
-  range = calc.range(sensParam, grid.dim, spz.range, spy.range, buffer, U.model, zero.loc, Xcoef.plot, Y, Z, X, Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, control.fit, null.trt, jitter)
+  range = calc.range(sensParam, grid.dim, spz.range, spy.range, buffer, U.model, zero.loc, Xcoef.plot, Y, Z, X, Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, control.fit, null.trt)
   zetaZ = range$zetaZ
   zetaY = range$zetaY
-  
+  grid.dim = c(length(zetaZ), length(zetaY))
+
   sens.coef <- sens.se <- zeta.z <- zeta.y <- zz.se <- zy.se <- resp.s2 <- trt.s2 <- array(NA, dim = c(grid.dim[2], grid.dim[1], nsim), dimnames = list(round(zetaY,3),round(zetaZ,3),NULL))
   
   cat("Computing final grid...\n")
@@ -241,7 +241,6 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
   if(!is.null(core) & U.model=="binomial"){
     ngrid = grid.dim[2]*grid.dim[1]
     out.foreach <- foreach::"%dopar%"(foreach::foreach(h=ngrid:1,.combine=cbind,.verbose=F),{
-      source("GLM_sens.R")
       j=grid.dim[1]-(h-1)%%grid.dim[1]
       i=grid.dim[2]-((h-1)-(h-1)%%grid.dim[1])/grid.dim[1]
       cell = cell +1
@@ -358,7 +357,7 @@ fit.treatSens <- function(sensParam, Y, Z, Y.res, Z.res, X, zetaY, zetaZ,v_Y, v_
   iter.j = control.fit$iter.j
   offset = control.fit$offset
   p = control.fit$p
-  
+
   #Generate U w/Y.res, Z.res 
   if(U.model == "normal"){  
     U <- try(contYZU(Y.res, Z.res, zetaY, zetaZ,v_Y, v_Z, sensParam))      
@@ -375,7 +374,7 @@ fit.treatSens <- function(sensParam, Y, Z, Y.res, Z.res, X, zetaY, zetaZ,v_Y, v_
     }else{
       stop(paste("Only probit link is allowed."))
     }
-    
+
     U = out.contYbinaryZU$U
     p = out.contYbinaryZU$p
   }
