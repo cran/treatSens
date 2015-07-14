@@ -14,11 +14,11 @@
 ####
 
 X.partials <- function(Y, Z, X, resp.family, trt.family) {
-	#if(class(resp.family) == "function"){
+	if(class(resp.family) == "function"){
 		fname = "X.partials.GLM"
-	#}else{
-	#	fname <- ifelse(length(resp.family) == 1, "X.partials.LMER", "X.partials.GLM")
-	#}
+	}else{
+		fname <- "X.partials.GLM"
+	}
 	do.call(fname, list(Y, Z, X, resp.family, trt.family))
 }
 
