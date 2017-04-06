@@ -2,6 +2,7 @@
 #Main function call
 ###############
 treatSens <- function(formula,         #formula: assume treatment is 1st term on rhs
+                      response.covariates = NULL,  #additional covariates to be added to response model only, as RHS-only formula (~ variables)
                      sensParam = "coef",	    #type of sensitivity parameter: accepts "coef" for model coefficients and "cor" for partial correlations
 				             resp.family = gaussian,  #family for GLM of model for response
                      trt.family = gaussian,	#family for GLM of model for treatment
@@ -10,6 +11,7 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
                      standardize = TRUE,	#Logical: should variables be standardized?
                      nsim = 20,			#number of simulated Us to average over per cell in grid
                      zero.loc = 1/3,		#location of zero along line y=x, as fraction in [0,1], or "full" if full range is desired
+				            # factor.summary = FALSE,  #logical; plot factor coefficents as a single summary across values (average magnitude)
                      verbose = FALSE,
                      buffer = 0.1, 		#restriction to range of coef on U to ensure stability around the edges
                      weights = NULL, 		#some user-specified vector or "ATE", "ATT", or "ATC" for GLM.sens to create weights.
@@ -17,47 +19,83 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
                      seed = 1234,     	#default seed is 1234.
                      iter.j = 10,     	#number of iteration in trt.family=binomial(link="probit")
                      offset = TRUE, 		#Logical: fit models with zeta*U fixed at target value, or with zeta fitted
-                     core = NULL, 		#number of CPU cores used (Max=8). Compatibility with Mac is unknown.
+                     core = NULL, 		#number of CPU cores used.
                      spy.range = NULL,  	#custom range for sensitivity parameter on Y, e.g.(0,10), zero.loc will be overridden.
                      spz.range = NULL,  	#custom range for sensitivity parameter on Z, e.g.(-2,2), zero.loc will be overridden.
                      trim.wt = 10     	#the maximum size of weight is set at "trim.wt"% of the inferential group. type NULL to turn off.
 ){
+  matchedCall <- match.call()
+  
   #this code let R issue warnings as they occur.
+  oldWarnings <- options()$warn
   options(warn=1)
   
   #return error if sensitivity parameter type is illegal
-  if(!(sensParam == "coef" | sensParam == "cor")){
-	stop(cat("Illegal value for sensParam.  Use 'coef' for model coefficients or 'cor' for partial correlations"))
+  if (!(sensParam == "coef" | sensParam == "cor")){
+    stop("illegal value for sensParam - use 'coef' for model coefficients or 'cor' for partial correlations")
   }
 
   #change offset to FALSE and print warning if sensParam = "cor"
   if(sensParam == "cor" & offset){
-	offset = FALSE
-	warning("Changed to offset = FALSE. Cannot use offset method with partial correlations.")
+    offset = FALSE
+    warning("changed to offset = FALSE; cannot use offset method with partial correlations")
   }
 
   #return error if only either spy.range or spz.range is specified.
   if((is.null(spy.range) & !is.null(spz.range))|(!is.null(spy.range) & is.null(spz.range))){
-    stop(paste("Either spy.range or spz.range is missing."))
+    stop("either spy.range or spz.range is missing")
   }
   
-   # set seed
+  ## set seed
+  if (!is.numeric(seed) || anyNA(seed))
+    stop("seed must be an integer")
+  if (!is.integer(seed) && any(as.double(as.integer(seed)) != seed))
+    warning("seed changed by coercion from double; supply an integer to be precise")
   set.seed(seed)
   
-  #extract variables from formula
-  form.vars <- parse.formula(formula, data)
+  ## not really sure what happens with length(core) > 1, but no error is raised by package
+  if (!is.null(core)) {
+    if (!is.numeric(core) || anyNA(core) || any(core <= 0))
+      stop("core must be a positive integer or NULL")
+    if (!is.integer(core) && any(as.double(as.integer(core)) != core)) {
+      warning("core changed by coercion from double; supply an integer to be precise")
+      core <- as.integer(core)
+    }
+  }
+  if (all(core == 1L)) core <- NULL
   
+  #extract variables from formula
+  form.vars <- parse.formula(formula, response.covariates,data)
+  
+  #######
+  ######
+  #Need to figure out how to make lengths compatible; removing observations with NA is not symmetric for two formulas
+  #######
+  ######
   Y = form.vars$resp
   Z = form.vars$trt
-  X = form.vars$covars
+  X = switch(is.null(form.vars$covars)+1, as.matrix(form.vars$covars), NULL)
+  XY = switch(is.null(form.vars$RespX)+1, as.matrix(form.vars$RespX), NULL)
   
   Z = as.numeric(Z)  	#treat factor-level Z as numeric...?  Or can recode so factor-level trt are a) not allowed b) not modeled (so no coefficient-type sensitivity params)
 
-  if(is.null(data))   data = data.frame(Y,Z,X)
+  if(!is.null(X)){
+    if(!is.null(XY)){
+      data = data.frame(Y,Z,X,XY)
+    }else{
+      data = data.frame(Y,Z,X)
+    }
+  }else{
+    if(!is.null(XY)){
+      data = data.frame(Y,Z,XY)
+    }else{
+      data = data.frame(Y,Z)
+    }    
+  }
   
   #Check whether data, options, and etc. conform to the format in "warnings.R"
   out.warnings <- warnings(formula, resp.family, trt.family, theta, grid.dim, 
-                           standardize,	nsim,	zero.loc,	verbose, buffer, spy.range, spz.range, weights, data)
+                           standardize,	nsim,	zero.loc,	verbose, buffer, spy.range, spz.range, weights, Y, Z, X, data)
   
   formula=out.warnings$formula
   resp.family=out.warnings$resp.family
@@ -76,12 +114,23 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
   
   #check and change U.model
   
-  if(identical(trt.family, gaussian)) {
-    if(verbose) cat("Normally distributed continous U is assumed.\n")
+  if (identical(trt.family, gaussian)) {
+    if (verbose) cat("Normally distributed continous U is assumed.\n")
     U.model = "normal"
-  } else if(identical(trt.family$link,"probit")) {
-    if(verbose) cat("Binary U with binomial distribution is assumed.\n")
+  } else if (identical(trt.family$link,"probit")) {
+    if (verbose) cat("Binary U with binomial distribution is assumed.\n")
     U.model = "binomial"    
+  }
+  
+  if (!is.null(matchedCall[["iter.j"]]) && (
+    class(trt.family) != "family" || trt.family$family != "binomial" || trt.family$link != "probit")) {
+    warning("iter.j option is meaningless unless trt.family = binomial(link=\"probit\")")
+  } else {
+    if (!is.numeric(iter.j) || is.na(iter.j) || length(iter.j) != 1 || iter.j < 1)
+    stop("iter.j must be an integer greater than or equal to 1")
+    if (!is.integer(iter.j) && as.double(as.integer(iter.j)) != iter.j)
+      warning("iter.j changed by coercion from double; supply an integer to be precise")
+    iter.j <- as.integer(iter.j)
   }
   
   
@@ -91,13 +140,15 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
     Z = std.nonbinary(Z)
     if(!is.null(X))
       X = apply(X, 2, std.nonbinary)
+    if(!is.null(XY))
+      XY = apply(XY, 2, std.nonbinary)
   } else { #MH: following two lines are added to avoid error in contYZU
     Y = as.numeric(Y)
     Z = as.numeric(Z)
   }
 
-  if(sensParam == "cor" && is.binary(Z))
-	stop("Partial correlations are not available for binary treatment")
+  if (sensParam == "cor" && is.binary(Z))
+    stop("partial correlations are not available for binary treatment")
   
   n.obs = length(Y)
   
@@ -115,71 +166,92 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
   #####WEIGHTED ESTIMATES
   #create weights if the user specifies either ATE, ATT, or ATC.
   
-  nt = sum(Z==1)
-  nc = sum(Z==0)
+  nt = sum(Z == 1)
+  nc = sum(Z == 0)
   
   if (!is.null(weights)) {
-    if (identical(class(weights),"character")) {
-      
-      if (!any(weights==c("ATE","ATT","ATC"))) {
-        stop(paste("Weights must be either \"ATE\", \"ATT\", \"ATC\" or a user-specified vector."))}
+    if (is.numeric(weights)) {
+      if (length(weights) != n.obs || anyNA(weights) || any(weights < 0))
+        stop("numeric weights must be of length equal to the number of observations and greater than equal to 0")
+      if (verbose) cat("User-supplied weight are being used.\n")
+    } else if (is.character(weights)) {
+      if (length(weights) != 1L || is.na(weights) || weights %not_in% c("ATE", "ATT", "ATC"))
+        stop("weights must be either \"ATE\", \"ATT\", \"ATC\" or a user-specified vector")
       
       #    if (!identical(trt.family,binomial) && !identical(trt.family,gaussian)) {
       #      stop(paste("trt.family must be either binomial or gaussian when \"ATE\", \"ATT\", or \"ATC\" is specified as weights."))}
       
-      if (identical(weights,"ATE")) {
+      if (weights == "ATE") {
         wts <- 1/null.trt$fitted
         wts[Z==0] <-1/(1-null.trt$fitted[Z==0])
         wts = wts*n.obs/sum(wts) #normalizing weight
-        cat("\"ATE\" option is selected. Sensitivity analysis is performed with the default Weights for the average treatment effect.","\n")}
-      
-      if (identical(weights,"ATT")) {
+        if (verbose) cat("\"ATE\" option is selected. Sensitivity analysis is performed with the default weights for the average treatment effect.\n")
+      } else if (weights == "ATT") {
         wts <- null.trt$fitted/(1-null.trt$fitted)
         wts[Z==1] <-1
         wts[Z==0] = wts[Z==0]*(nc/sum(wts[Z==0])) #normalizing weight
-        cat("\"ATT\" option is selected. Sensitivity analysis is performed with the default Weights for the average treatment effect in the treated.","\n")}
-      
-      if (identical(weights,"ATC")) {
+        if (verbose) cat("\"ATT\" option is selected. Sensitivity analysis is performed with the default weights for the average treatment effect in the treated.","\n")
+      } else if (weights == "ATC") {
         wts <- (1-null.trt$fitted)/null.trt$fitted
         wts[Z==0] <- 1
         wts[Z==1] = wts[Z==1]*(nt/sum(wts[Z==1])) #normalizing weight
-        cat("\"ATC\" option is selected. Sensitivity analysis is performed with the default Weights for the average treatment effect in the controls","\n")}
+        if (verbose) cat("\"ATC\" option is selected. Sensitivity analysis is performed with the default weights for the average treatment effect in the controls","\n")
+      }
       
       #   trim.weight option
       if (!is.null(trim.wt)) {
-        if (is.numeric(trim.wt) & length(trim.wt)==1) {
-          if (identical(weights,"ATE")) max.wt = trim.wt/100*n.obs
-          if (identical(weights,"ATT")) max.wt = trim.wt/100*nt
-          if (identical(weights,"ATC")) max.wt = trim.wt/100*nc
-          wts[wts>max.wt] = max.wt
-          cat("Weight trimming is applied.  The maximum size of weights is set to", max.wt,", which is", trim.wt,"% of the size of the inferential group.","\n")
-        } else {
-          stop(paste("trim.wt must be a number greater than 0."))}
+        if (!is.numeric(trim.wt) || length(trim.wt) != 1L || is.na(trim.wt) || trim.wt <= 0 || trim.wt > 100)
+          stop("trim.wt must be a single number greater than 0 and less or equal to 100")
+        
+        if (identical(weights, "ATE")) max.wt = trim.wt / 100 * n.obs
+        if (identical(weights, "ATT")) max.wt = trim.wt / 100 * nt
+        if (identical(weights, "ATC")) max.wt = trim.wt / 100 * nc
+        wts[wts > max.wt] = max.wt
+        if (verbose) cat("Weight trimming is applied. The maximum size of weights is set to", max.wt,", which is", trim.wt,"% of the size of the inferential group.\n")
       }
       weights <- wts
-    } else if (identical(class(weights),"numeric") & length(weights)==n.obs) {
-      cat("User-supplied weight is used.","\n")
     } else {
-      stop(paste("Weights must be either \"ATE\", \"ATT\", \"ATC\" or a user-specified vector."))}
+      stop("weights must be either \"ATE\", \"ATT\", \"ATC\" or a user-specified numeric vector")
+    }
+  } else {
+    if (!missing(trim.wt))
+      warning("trim.wt argument meaningless unless weights = \"ATE\", \"ATT\", or \"ATC\"; will be ignored")
   }
   
   ##########
   
-  cat("Fitting null models...\n")
+  if (verbose) cat("Fitting null models...\n")
   #fit null model for the outcome & get residuals
   if(!is.null(X)) {
-    null.resp <- glm(Y~Z+X, family=resp.family, weights=weights)
+    if(!is.null(XY)){
+      null.resp <- glm(Y~Z+X+XY, family=resp.family, weights=weights)
+      nx = dim(X)[2]+dim(XY)[2]
+      nxy = dim(XY)[2]
+    }else{
+      null.resp <- glm(Y~Z+X, family=resp.family, weights=weights)
+      nx = dim(X)[2]
+      nxy = 0
+    }
   }else{
-    null.resp <- glm(Y~Z, resp.family)
+    if(!is.null(XY)){
+      null.resp <- glm(Y~Z+XY, family=resp.family, weights=weights)
+      nx = dim(XY)[2]
+      nxy = dim(XY)[2]
+    }else{
+      null.resp <- glm(Y~Z, resp.family)
+      nx = 0
+      nxy = 0
+    }
   }
   sgnTau0 = sign(null.resp$coef[2])
 
   n = length(null.resp$coef)
   Y.res <- Y-null.resp$fitted.values
-  if(!is.null(X)) {
-    v_Y <- var(Y.res)*(n.obs-1)/(n.obs-dim(X)[2]-2)
-    Xcoef = cbind(null.trt$coef[-1], null.resp$coef[-c(1,2)])
-    Xpartials <- X.partials(Y, Z, X, resp.family, trt.family)
+  if(!is.null(X) | !is.null(XY)) {
+    v_Y <- var(Y.res)*(n.obs-1)/(n.obs-nx-nxy-2)
+    ncoef = length(null.resp$coef)
+    Xcoef = cbind(null.trt$coef[-1], null.resp$coef[-c(1,2,(nx-nxy+3):(ncoef+1))])
+    Xpartials <- X.partials(Y, Z, X, XY, resp.family, trt.family)
   }else{
     v_Y <- var(Y.res)*(n.obs-1)/(n.obs-2)
     Xcoef <- NULL
@@ -189,7 +261,7 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
   # change buffer = 0 when v_Y or v_Z is small.
   if ((v_Y-buffer<=0)||(v_Z-buffer<=0)||(v_Z/(theta*(1-theta))-buffer<=0)) {
     buffer = 0
-    warning("Buffer is set to 0 because some of residual variances are too small.")
+    warning("buffer is set to 0 because some of residual variances are too small")
   }
    
   
@@ -197,30 +269,34 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
     #Transform X with neg. reln to Y to limit plot to 1 & 2 quadrants.
     Xcoef.flg =  as.vector(ifelse(Xcoef[,2]>=0,1,-1))
     X.positive = t(t(X)*Xcoef.flg)
-    null.resp.plot <- glm(Y~Z+X.positive, family=resp.family, weights=weights)
-    Xcoef.plot = cbind(null.trt$coef[-1], null.resp.plot$coef[-c(1,2)])
+    if(!is.null(XY)){
+      null.resp.plot <- glm(Y~Z+X.positive+XY, family=resp.family, weights=weights)
+    }else{
+      null.resp.plot <- glm(Y~Z+X.positive, family=resp.family, weights=weights)
+    }
+    Xcoef.plot = cbind(null.trt$coef[-1], null.resp.plot$coef[-c(1,2,(nx-nxy+3):(ncoef+1))])
   }
   if(!is.null(X) & sensParam == "cor") {
     #Transform X with neg. reln to Y to limit plot to 1 & 2 quadrants.
     Xcoef.flg =  as.vector(ifelse(Xpartials[,2]>=0,1,-1))
     X.positive = t(t(X)*Xcoef.flg)
-    Xcoef.plot <- cbind(X.partials[,1], X.partials(Y, Z, X.positive, resp.family, trt.family)[,2])
+    Xcoef.plot <- cbind(X.partials[,1], X.partials(Y, Z, X.positive, XY, resp.family, trt.family)[,2])
     Xcoef <- Xpartials
   }
   
   #register control.fit
   control.fit = list(resp.family=resp.family, trt.family=trt.family, U.model=U.model, 
                      standardize=standardize, weights=weights, iter.j=iter.j, 
-                     offset = offset, p = NULL)
+                     offset = offset, p = NULL, XY = XY)
   
-  range = calc.range(sensParam, grid.dim, spz.range, spy.range, buffer, U.model, zero.loc, Xcoef.plot, Y, Z, X, Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, control.fit, null.trt)
+  range = calc.range(sensParam, grid.dim, spz.range, spy.range, buffer, U.model, zero.loc, Xcoef.plot, Y, Z, X, Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, control.fit, null.trt, verbose)
   zetaZ = range$zetaZ
   zetaY = range$zetaY
   grid.dim = c(length(zetaZ), length(zetaY))
 
   sens.coef <- sens.se <- zeta.z <- zeta.y <- zz.se <- zy.se <- resp.s2 <- trt.s2 <- array(NA, dim = c(grid.dim[2], grid.dim[1], nsim), dimnames = list(round(zetaY,3),round(zetaZ,3),NULL))
   
-  cat("Computing final grid...\n")
+  if (verbose) cat("Computing final grid...\n")
   
   #fill in grid
   cell = 0
@@ -341,6 +417,8 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
   
   if(!is.null(core) && dp) parallel::stopCluster(cl)   # Stop using multicore.
   
+  options(warn = oldWarnings)
+  
   return(result)
 }
 
@@ -348,7 +426,7 @@ treatSens <- function(formula,         #formula: assume treatment is 1st term on
 #fit.treatSens
 ###########
 
-fit.treatSens <- function(sensParam, Y, Z, Y.res, Z.res, X, zetaY, zetaZ,v_Y, v_Z, theta, control.fit) {
+fit.treatSens <- function(sensParam, Y, Z, Y.res, Z.res, X, zetaY, zetaZ,v_Y, v_Z, theta, control.fit, W = NULL) {
   resp.family = control.fit$resp.family
   trt.family = control.fit$trt.family
   U.model = control.fit$U.model
@@ -357,7 +435,8 @@ fit.treatSens <- function(sensParam, Y, Z, Y.res, Z.res, X, zetaY, zetaZ,v_Y, v_
   iter.j = control.fit$iter.j
   offset = control.fit$offset
   p = control.fit$p
-
+  XY = control.fit$XY
+  
   #Generate U w/Y.res, Z.res 
   if(U.model == "normal"){  
     U <- try(contYZU(Y.res, Z.res, zetaY, zetaZ,v_Y, v_Z, sensParam))      
@@ -367,12 +446,12 @@ fit.treatSens <- function(sensParam, Y, Z, Y.res, Z.res, X, zetaY, zetaZ,v_Y, v_
     if(identical(trt.family$link,"probit")){
       if(!is.null(X)) {
         #debug(contYbinaryZU)
-        out.contYbinaryZU <- try(contYbinaryZU(Y, Z, X, zetaY, zetaZ, theta, iter.j, weights, offset, p))
+        out.contYbinaryZU <- try(contYbinaryZU(Y, Z, X, XY, zetaY, zetaZ, theta, iter.j, weights, offset, p))
       } else {
-        out.contYbinaryZU <- try(contYbinaryZU.noX(Y, Z, zetaY, zetaZ, theta, iter.j, weights, offset, p))
+        out.contYbinaryZU <- try(contYbinaryZU.noX(Y, Z, XY, zetaY, zetaZ, theta, iter.j, weights, offset, p))
       }
     }else{
-      stop(paste("Only probit link is allowed."))
+      stop("only probit link is allowed")
     }
 
     U = out.contYbinaryZU$U
@@ -386,20 +465,41 @@ fit.treatSens <- function(sensParam, Y, Z, Y.res, Z.res, X, zetaY, zetaZ,v_Y, v_
     if(std) U = std.nonbinary(U)
     
     if(!is.null(X)) {
-      fit.glm <- switch(offset+1,
-                        "FALSE" = glm(Y~Z+U+X, family=resp.family, weights=weights),
-                        "TRUE" = glm(Y~Z+X, family=resp.family, weights=weights, offset=zetaY*U))   
+      if(!is.null(XY)){
+        fit.glm <- switch(offset+1,
+                        "FALSE" = glm(Y~Z+U+X+XY, family=resp.family, weights=weights),
+                        "TRUE" = glm(Y~Z+X+XY, family=resp.family, weights=weights, offset=zetaY*U))   
       
-      sens.se <- switch(class(weights),
+        sens.se <- switch(class(weights),
                         "NULL" = summary(fit.glm)$coefficients[2,2],
-                        "character" = pweight(Z=Z, X=X, r=fit.glm$residuals, wt=weights), #pweight is custom function
-                        "numeric" = pweight(Z=Z, X=X, r=fit.glm$residuals, wt=weights)) #pweight is custom function
+                        "character" = pweight(Z=Z, X=cbind(X,XY), r=fit.glm$residuals, wt=weights), #pweight is custom function
+                        "numeric" = pweight(Z=Z, X=cbind(X,XY), r=fit.glm$residuals, wt=weights)) #pweight is custom function
+      }else{
+        fit.glm <- switch(offset+1,
+                          "FALSE" = glm(Y~Z+U+X, family=resp.family, weights=weights),
+                          "TRUE" = glm(Y~Z+X, family=resp.family, weights=weights, offset=zetaY*U))   
+        
+        sens.se <- switch(class(weights),
+                          "NULL" = summary(fit.glm)$coefficients[2,2],
+                          "character" = pweight(Z=Z, X=X, r=fit.glm$residuals, wt=weights), #pweight is custom function
+                          "numeric" = pweight(Z=Z, X=X, r=fit.glm$residuals, wt=weights)) #pweight is custom function
+      }
       fit.trt <- glm(Z~U+X, family=trt.family)
     }else{
-      fit.glm <- switch(offset+1,
-                        "FALSE" = glm(Y~Z+U, family=resp.family, weights=weights),
-                        "TRUE" = glm(Y~Z, family=resp.family, weights=weights, offset=zetaY*U))   
-      sens.se = summary(fit.glm)$coefficients[2,2]
+      if(!is.null(XY)){
+        fit.glm <- switch(offset+1,
+                        "FALSE" = glm(Y~Z+U+XY, family=resp.family, weights=weights),
+                        "TRUE" = glm(Y~Z+XY, family=resp.family, weights=weights, offset=zetaY*U))   
+        sens.se = switch(class(weights),
+                         "NULL" = summary(fit.glm)$coefficients[2,2],
+                         "character" = pweight(Z=Z, X=XY, r=fit.glm$residuals, wt=weights), #pweight is custom function
+                         "numeric" = pweight(Z=Z, X=XY, r=fit.glm$residuals, wt=weights)) #pweight is custom function
+      }else{
+        fit.glm <- switch(offset+1,
+                          "FALSE" = glm(Y~Z+U, family=resp.family, weights=weights),
+                          "TRUE" = glm(Y~Z, family=resp.family, weights=weights, offset=zetaY*U))   
+        sens.se = summary(fit.glm)$coefficients[2,2]
+      }
       fit.trt <- glm(Z~U, family=trt.family)		
     }
     

@@ -7,17 +7,18 @@ Performing Dual-Parameter Sensitivity Analysis
 \code{treatSens} performs dual-parameter sensitivity analysis for unobserved confounding for both continuous and binary treatment variables.
 }
 \usage{
-treatSens(formula, sensParam = "coef", resp.family = gaussian, trt.family = gaussian, 
-theta = 0.5, grid.dim = c(8,4), standardize = TRUE, 
-nsim = 20, zero.loc = 1/3, verbose = FALSE, 
-buffer = 0.1, weights = NULL, data = NULL, seed = 1234, 
-iter.j = 10, offset = TRUE, core = NULL, spy.range = NULL, 
+treatSens(formula, response.covariates = NULL, sensParam = "coef", resp.family = gaussian,
+trt.family = gaussian, theta = 0.5, grid.dim = c(8,4), standardize = TRUE, 
+nsim = 20, zero.loc = 1/3, verbose = FALSE, buffer = 0.1, weights = NULL, 
+data = NULL, seed = 1234, iter.j = 10, offset = TRUE, core = NULL, spy.range = NULL, 
 spz.range = NULL, trim.wt = 10)
 }
 \arguments{
   \item{formula}{an object of class \code{\link{formula}} (or one that can be coerced to that class): a symbolic description of the model to be fitted.
 }
-  \item{sensParam}{a string giving the choice of the form of the sensitivity parameters.  Supports "coef" for model coefficient and "cor" for partial correlations (with continuous treatment only)
+\item{response.covariates}{an object of class \code{\link{formula}} (or one that can be coerced to that class): a one-sided formula giving additional predictors to be included in the response model but not the treatment model.
+}
+\item{sensParam}{a string giving the choice of the form of the sensitivity parameters.  Supports "coef" for model coefficient and "cor" for partial correlations (with continuous treatment only)
 }
   \item{resp.family}{an assumed family for GLM of the response model. Currently only supports \code{gaussian}. 
 }
@@ -47,7 +48,7 @@ spz.range = NULL, trim.wt = 10)
 }
   \item{offset}{Models are fit by setting zeta.z*U or zeta.y*U explicitly as an offset (rather than simply including generated U in the model). Only consistent with \code{sensParam = "coef"}. The default is \code{TRUE}.
 }
-  \item{core}{number of CPU cores used for parallel processing (Max=8). The default is \code{NULL}. 
+  \item{core}{number of CPU cores used for parallel processing. The default is \code{NULL}, which implies single-threading. 
 }
   \item{spy.range}{custom range for the sensitiviy parameter associated with Y (the coefficient on U in the outcome model or partial correlation of U with Y given X), e.g. \code{c(0,2)}. When this option is specified, \code{zetaz.range} must be also specified and \code{zero.loc} will be overridden. The default is \code{NULL}.
 }
@@ -91,7 +92,7 @@ When \code{weights} are specified, \code{treatSens} returns clustered robust sta
 
 Matrices and data frames should include only complete cases.
 }
-\references{Carnegie NB, Hill JH and Harada M. Assessing sensitivity to unmeasured confounding using simulated potential confounders (under review)
+\references{Carnegie NB, Hill JH and Harada M. (2016) Assessing sensitivity to unmeasured confounding using simulated potential confounders. Journal of Research on Educational Effectiveness 9(3):395-420.
 }
 \author{Nicole Bohme Carnegie, Masataka Harada, and Jennifer Hill
 }
@@ -99,7 +100,7 @@ Matrices and data frames should include only complete cases.
 \code{\link{sensPlot}} \code{\link{summary.sensitivity}} \code{\link{glm}}
 }
 \examples{
-N = 300          #number of observations
+N = 250          #number of observations
 
 zetay = .5             #coefficient on U in the outcome model
 zetaz = .5             #coefficient on U in the treatment model
@@ -117,10 +118,9 @@ Z = rnorm(N,X \%*\% betaz + zetaz*U,1)         #treatment variable
 Y = rnorm(N,X \%*\% betay + zetay*U + tau*Z,2) #outcome variable
 
 # sensitivity analysis
-out.cont <- treatSens(Y~Z+X, grid.dim = c(8,5), nsim = 5,
+# small grid.dim and nsim just for example purposes
+out.cont <- treatSens(Y~Z+X, grid.dim = c(3,2), nsim = 5,
                      standardize = FALSE, verbose = TRUE, zero.loc = "full")
-
-summary(out.cont) #Prints average value of tau (trt effect) for each cell in grid.
 
 sensPlot(out.cont) # draw contour plot
 # You can see when zetay=zetaz=.5, tau is about .25.
@@ -140,8 +140,6 @@ Y = Y0*(1-Z) + Y1*Z                  #realization of potential outcome
 out.bin <- treatSens(Y~Z+X, trt.family = binomial(link="probit"), nsim = 3, 
                       spy.range = c(0,4), spz.range = c(-2,2),grid.dim = c(5,3),
                       standardize = FALSE, verbose = TRUE)
-
-summary(out.bin) #Prints average value of tau (trt effect) for each cell in grid.
 
 sensPlot(out.bin) # draw contour plot
 

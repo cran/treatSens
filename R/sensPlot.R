@@ -48,11 +48,20 @@ sensPlotMain = function(x, contour.levels, col.zero, lty.zero, col.insig, lty.in
   }
   
   ##############  
-  #######Only inclue X on the plot for GLM-style
+  #######Only include X on the plot for GLM-style
   ############
   Xpart = x$Xcoef[!is.na(x$Xcoef[,1]) & !is.na(x$Xcoef[,2]),] #coefficients of null model.  
   Xpart.plot = x$Xcoef.plot[!is.na(x$Xcoef.plot[,1]) & !is.na(x$Xcoef.plot[,2]),]
+  if(!is.null(Xpart) & is.null(dim(Xpart))){
+    Xpart = matrix(Xpart, nrow = 1)
+    Xpart.plot = matrix(Xpart.plot, nrow = 1)
+  
+  } 
+  
   Xpart.plot2 = cbind(Xpart.plot[,1],Xpart.plot[,2], ifelse(Xpart[,2]>=0,1,2)) #MH: add sign of coef of X on Y to Xpart  
+  if(!is.null(Xpart.plot2) & is.null(dim(Xpart.plot2))){
+    Xpart.plot2 = matrix(Xpart.plot2, nrow = 1)
+  } 
     
   #note that due to correlation among Xs, some may not appear on plot
   #because observed partial cors don't map directly to coefs in this case
@@ -105,14 +114,21 @@ sensPlotMain = function(x, contour.levels, col.zero, lty.zero, col.insig, lty.in
   
   if (limit.Xplot) {
     #old codes
-    plot(Xpart.plot2[,1], Xpart.plot2[,2], col=c("blue","red")[Xpart.plot2[,3]], xlim = c(min(Zcors, na.rm = T),max(Zcors, na.rm = T)), 
+    plot(Xpart.plot2[,1], Xpart.plot2[,2], col=c("red","blue")[Xpart.plot2[,3]], xlim = c(min(Zcors, na.rm = T),max(Zcors, na.rm = T)), 
          ylim = c(min(Ycors, na.rm = T),max(Ycors, na.rm = T)), pch = X.pch, xlab = xlab, ylab = ylab)
     outsidePts = Xpart.plot2[(Xpart.plot[,1] < min(Zcors, na.rm = T)) | (Xpart.plot[,1] > max(Zcors, na.rm = T)) | (Xpart.plot[,2] > max(Ycors, na.rm = T)),]
     if(length(outsidePts) > 0){
-      outsidePts[,1] = apply(cbind(outsidePts[,1], min(Zcors, na.rm = T)), 1, max)
-      outsidePts[,1] = apply(cbind(outsidePts[,1], max(Zcors, na.rm = T)), 1, min)
-      outsidePts[,2] = apply(cbind(outsidePts[,2], max(Ycors, na.rm = T)), 1, min)
-      points(outsidePts[,1], outsidePts[,2], col=c("blue","red")[outsidePts[,3]], pch = out.pch, cex = 1.5, lwd = 3)
+      if(is.null(dim(outsidePts))){
+        outsidePts[1] = max(outsidePts[1], min(Zcors, na.rm = T))
+        outsidePts[1] = min(outsidePts[1], max(Zcors, na.rm = T))
+        outsidePts[2] = min(outsidePts[2], max(Ycors, na.rm = T))
+        outsidePts = matrix(outsidePts, nrow = 1)
+      }else{
+        outsidePts[,1] = apply(cbind(outsidePts[,1], min(Zcors, na.rm = T)), 1, max)
+        outsidePts[,1] = apply(cbind(outsidePts[,1], max(Zcors, na.rm = T)), 1, min)
+        outsidePts[,2] = apply(cbind(outsidePts[,2], max(Ycors, na.rm = T)), 1, min)
+      }
+      points(outsidePts[,1], outsidePts[,2], col=c("red","blue")[outsidePts[,3]], pch = out.pch, cex = 1.5, lwd = 3)
       warning("Note: predictors outside plot region plotted at margin with O")
     }
   } else {

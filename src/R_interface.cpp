@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <dbarts/cstdint.hpp>
+#include <cstdlib> // malloc, free for PoDs
 #include <cstring>
 
 #include <R.h>
@@ -22,9 +23,10 @@
 
 using std::size_t;
 using std::uint32_t;
+using std::strcmp;
 
 extern "C" {
-  void R_init_treatSens(DllInfo* info);
+  // void R_init_treatSens(DllInfo* info);
 }
 
 namespace {
@@ -66,12 +68,15 @@ namespace {
       cibart::ProbitPrior* prior = NULL;
       switch(family) {
         case cibart::PROBIT_PRIOR_STUDENT_T:
-        prior = new cibart::ProbitStudentTPrior;
+        // prior = new cibart::ProbitStudentTPrior;
+        // these are PoDs which require that we malloc them
+        prior = static_cast<cibart::ProbitPrior*>(malloc(sizeof(cibart::ProbitStudentTPrior)));
         static_cast<cibart::ProbitStudentTPrior *>(prior)->scale = REAL(getListElement(modelExpr, "scale"));
         static_cast<cibart::ProbitStudentTPrior *>(prior)->dof   = REAL(getListElement(modelExpr, "df"))[0];
         break;
         case cibart::PROBIT_PRIOR_NORMAL:
-        prior = new cibart::ProbitNormalPrior;
+        // prior = new cibart::ProbitNormalPrior;
+        prior = static_cast<cibart::ProbitPrior*>(malloc(sizeof(cibart::ProbitNormalPrior)));
         static_cast<cibart::ProbitNormalPrior *>(prior)->scale = REAL(getListElement(modelExpr, "scale"));
         case cibart::PROBIT_PRIOR_FLAT:
         break;
@@ -102,7 +107,8 @@ namespace {
       case PROBIT:
       {
         cibart::ProbitTreatmentModel* treatmentModel = static_cast<cibart::ProbitTreatmentModel*>(treatmentModelPtr);
-        delete treatmentModel->prior;
+        // delete treatmentModel->prior;
+        free(const_cast<cibart::ProbitPrior*>(treatmentModel->prior));
         delete treatmentModel;
       }
       break;
@@ -470,13 +476,18 @@ namespace {
     
     return result;
   } */
+}
 
+extern "C" SEXP _rcpp_module_boot_stan_fit4cont_binary_mlm_mod();
+
+namespace {
 #define DEF_FUNC(_N_, _F_, _A_) { _N_, reinterpret_cast<DL_FUNC>(&_F_), _A_ }
   
   R_CallMethodDef R_callMethods[] = {
     DEF_FUNC("treatSens_fitSensitivityAnalysis", fitSensitivityAnalysis, 11),
     DEF_FUNC("treatSens_guessNumCores", guessNumCores, 0),
     DEF_FUNC("treatSens_glmFit", glmFit, 5),
+    DEF_FUNC("_rcpp_module_boot_stan_fit4cont_binary_mlm_mod", _rcpp_module_boot_stan_fit4cont_binary_mlm_mod, 0),
 //    DEF_FUNC("treatSens_chol", chol, 1),
 //    DEF_FUNC("treatSens_crossprod", crossprod, 1),
 //    DEF_FUNC("treatSens_multiply", multiply, 2),
@@ -488,7 +499,8 @@ namespace {
 
 #undef DEF_FUNC
 
-extern "C" { 
+extern "C" {
+  
   void R_init_treatSens(DllInfo* info)
   {
     R_registerRoutines(info, NULL, R_callMethods, NULL, NULL);

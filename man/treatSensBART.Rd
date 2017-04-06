@@ -60,11 +60,15 @@ Unique options to \code{treatSens.BART} are given by the argument \code{trt.mode
 \value{
   \code{treatSens.BART} returns an object of class "\code{sensitivity}". See \link{treatSens} for details.
 }
+\references{Dorie V, Harada M, Carnegie NB, and Hill J. (2016) A Flexible, Interpretable Framework for Assessing Sensitivity to Unmeasured Confounding. Statistics in Medicine 35(20):3453-3470
+}
+\author{Vincent Dorie, Nicole Bohme Carnegie, Masataka Harada, and Jennifer Hill
+}
 \seealso{
   \code{\link{treatSens}}
 }
 \examples{
-N <- 300                      # number of observations
+N <- 250                      # number of observations
 
 zetay <- 0.5                  # coefficient on U in the outcome model
 zetaz <- 0.5                  # coefficient on U in the treatment model
@@ -88,8 +92,6 @@ Y  <- Y0 * (1 - Z) + Y1 * Z                             # realization of potenti
 out.bin <- treatSens.BART(Y ~ Z + X, nsim = 3, nthin = 2, nburn = 0,
                           spy.range = c(0, 4), spz.range = c(-2 , 2), grid.dim = c(5, 3),
                           standardize = FALSE, verbose = TRUE)
-
-summary(out.bin) # prints average value of tau (trt effect) for each cell in grid
 
 sensPlot(out.bin) # draw contour plot
 

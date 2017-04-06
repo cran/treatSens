@@ -74,20 +74,23 @@ treatSens.BART <- function(formula,                # formula: assume treatment i
     stop("either spy.range or spz.range is missing")
   }
   
-  "%not_in%" <- function(x, table) match(x, table, nomatch = 0) == 0
   if (!is.null(est.type) && est.type %not_in% c("ATE", "ATT", "ATC")) {
     stop("estimate type must be either \"ATE\", \"ATT\", or \"ATC\"")
   }
   
   # set seed
+  if (!is.numeric(seed) || anyNA(seed))
+    stop("seed must be an integer")
+  if (!is.integer(seed) && as.double(as.integer(seed)) != seed)
+    warning("seed changed by coercion from double; supply an integer to be precise")
   set.seed(seed)
   
   #extract variables from formula
-  form.vars <- parse.formula(formula, data)
+  form.vars <- parse.formula(formula, resp.cov = NULL, data)
   
   Y <- form.vars$resp
   Z <- form.vars$trt
-  X <- form.vars$covars
+  X <- as.matrix(form.vars$covars)
   
   Z <- as.numeric(Z)  # treat factor-level Z as numeric...?  Or can recode so factor-level trt are a) not allowed b) not modeled (so no coefficient-type sensitivity params)
   
@@ -97,11 +100,12 @@ treatSens.BART <- function(formula,                # formula: assume treatment i
     stop("currently only binary treatments are supported")
  
   # Check whether data, options, and etc. conform to the format in "warnings.R"
-  out.warnings <- warningsBART(formula, grid.dim, 
-                               verbose, spy.range, spz.range, est.type, data)
+  out.warnings <- warningsBART(formula, theta, grid.dim, nsim,
+                               verbose, spy.range, spz.range, est.type, form.vars, data)
   
   formula   <- out.warnings$formula
   grid.dim  <- out.warnings$grid.dim
+  nsim      <- out.warnings$nsim
   data      <- out.warnings$data
   spy.range <- out.warnings$zetay.range
   spz.range <- out.warnings$zetaz.range

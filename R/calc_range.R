@@ -1,12 +1,12 @@
 ############
 #Generic function splits on sensitivity parameter type
 ############
-calc.range = function(sensParam, grid.dim, zetaz.range, zetay.range, buffer, U.model, zero.loc, Xcoef.plot, Y, Z, X, Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, control.fit, null.trt) {
+calc.range = function(sensParam, grid.dim, zetaz.range, zetay.range, buffer, U.model, zero.loc, Xcoef.plot, Y, Z, X, Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, control.fit, null.trt, verbose, W = NULL) {
 	if(sensParam == "coef") 
-		result = calc.range.coef(grid.dim, zetaz.range, zetay.range, buffer, U.model, zero.loc, Xcoef.plot, Y, Z, X, Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, control.fit, null.trt)
+		result = calc.range.coef(grid.dim, zetaz.range, zetay.range, buffer, U.model, zero.loc, Xcoef.plot, Y, Z, X, Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, control.fit, null.trt, verbose, W)
 
 	if(sensParam == "cor") 
-		result = calc.range.cor(grid.dim, zetaz.range, zetay.range, U.model, zero.loc, Xcoef.plot, Y, Z, X, Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, control.fit)
+		result = calc.range.cor(grid.dim, zetaz.range, zetay.range, U.model, zero.loc, Xcoef.plot, Y, Z, X, Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, control.fit, verbose)
 
 	return(result)
 }
@@ -16,13 +16,13 @@ calc.range = function(sensParam, grid.dim, zetaz.range, zetay.range, buffer, U.m
 #function to calculate vector of sensitivity paramters 
 #using coefficients as SPs
 ##############
-calc.range.coef = function(grid.dim, zetaz.range, zetay.range, buffer, U.model, zero.loc, Xcoef.plot, Y, Z, X, Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, control.fit,null.trt) {
+calc.range.coef = function(grid.dim, zetaz.range, zetay.range, buffer, U.model, zero.loc, Xcoef.plot, Y, Z, X, Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, control.fit,null.trt, verbose, W=NULL) {
 	extreme.coef = matrix(c(-sqrt((v_Y-buffer)/(1-buffer)), -sqrt(v_Z-buffer), sqrt((v_Y-buffer)/(1-buffer)), sqrt(v_Z-buffer)), nrow = 2) 
 	  if(U.model == "binomial" & !is.binary(Z)){ 
 	    extreme.coef = matrix(c(-sqrt(4*v_Y-buffer), -sqrt(v_Z/(theta*(1-theta))-buffer), sqrt(4*v_Y-buffer), sqrt(v_Z/(theta*(1-theta))-buffer)), nrow = 2) 
 	  }
 	  if(U.model == "binomial" & is.binary(Z)){ 
-	    lp.quant = quantile(null.trt$linear.predictors, 0.25)
+	    lp.quant = quantile(qnorm(fitted.values(null.trt)), 0.25)
 	    zetaz.min = max(-(2-lp.quant), -3) 
 	    zetaz.max = min((2-lp.quant), 3)   
 	    extreme.coef = matrix(c(-sqrt(4*v_Y-buffer), zetaz.min, sqrt(4*v_Y-buffer), zetaz.max), nrow = 2)
@@ -90,10 +90,10 @@ calc.range.coef = function(grid.dim, zetaz.range, zetay.range, buffer, U.model, 
 	    zetaY <- seq(0, extreme.coef[1,2]*.95, length.out = grid.dim[2])
 	  }else{
 	    #find ranges for final grid
-	    cat("Finding grid range...\n")
+	    if (verbose) cat("Finding grid range...\n")
 	    grid.range = grid.search(extreme.coef, zero.loc, Xcoef.plot, Y, Z, X=X, 
 	                             Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, 
-	                             control.fit = control.fit, sensParam = "coef")
+	                             control.fit = control.fit, sensParam = "coef", W = W)
     
 	    zetaY <- seq(grid.range[1,1], grid.range[1,2], length.out = grid.dim[2])
 	    zetaZ <- seq(grid.range[2,1], grid.range[2,2], length.out = grid.dim[1])
@@ -113,7 +113,7 @@ calc.range.coef = function(grid.dim, zetaz.range, zetay.range, buffer, U.model, 
 ##############
 calc.range.cor = function(grid.dim, zetaz.range, zetay.range, U.model, zero.loc, Xcoef.plot, Y, Z, X, 
 	                             Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, 
-	                             control.fit) {
+	                             control.fit, verbose) {
   
 	extreme.cors = maxCor(Y.res, Z.res)
 	if(U.model == "binomial") {
@@ -182,7 +182,7 @@ calc.range.cor = function(grid.dim, zetaz.range, zetay.range, U.model, zero.loc,
 	    zetaY <- seq(0, extreme.cors[1,2]*.95, length.out = grid.dim[2])
 	  }else{
 	    #find ranges for final grid
-	    cat("Finding grid range...\n")
+	    if (verbose) cat("Finding grid range...\n")
 	    grid.range = grid.search(extreme.cors, zero.loc, Xcoef.plot, Y, Z, X, 
 	                             Y.res, Z.res, v_Y, v_Z, theta, sgnTau0, 
 	                             control.fit = control.fit, sensParam = "cor")
