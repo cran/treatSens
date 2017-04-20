@@ -1,4 +1,4 @@
-1246461d3e94746d7a9be674b7a084d8 *DESCRIPTION
+b856eec93ac073cc75621f37fb5b5415 *DESCRIPTION
 ae0e5106b6d9fda1c901c5a4c63a75f6 *NAMESPACE
 fa4825fbfc22077b16b90e7d79a3f40e *R/X_partials.R
 ad5d8ec660ce36906728a000306d37a1 *R/calc_range.R
@@ -21,7 +21,7 @@ bc66a27b485d619b529b4626ee1281d3 *R/object_def.R
 4382f9bbfdfe22d6394400b17b6a6493 *R/warnings.R
 07649eb508c50c46202598e5e8b40ccc *R/zzz.R
 c1ea434243bc8bdf07a63f3a858c1077 *cleanup
-71453bcc0d83dd05b34a44acebd167cb *configure
+b3b352316652f379d8085759fa41786b *configure
 158dc93c1d492039fa1aaf3b1f904685 *configure.ac
 29ed19bf4c769e7cfd915f9906bc20d9 *configure.win
 4051ff39f4676a824fa9f8a1200a3939 *exec/cont_binary_mlm.stan
